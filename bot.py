@@ -841,6 +841,24 @@ TASK: Extract the TOTAL USDT amount that was SPENT (amount sent + network fee).
 
 We need to know how much to DEDUCT from our balance when staff sends USDT.
 
+BANK TYPE IDENTIFICATION (CRITICAL):
+
+1. SWIFT WALLET - Identify by these features:
+   - Has "N" logo icon (blue/purple N symbol) at top
+   - Clean white interface with purple/blue accents
+   - Shows "Network fee" in TRX format (e.g., "8.4799 TRX (2.50 $)")
+   - Has "View on block explorer" link at bottom
+   - Shows Date, Status, Recipient fields
+   - Recipient shows TRC20 address (starts with T...)
+   - Amount displayed as "-X,XXX USDT" with USD equivalent below
+   
+2. BINANCE - Identify by these features:
+   - Yellow/gold Binance logo
+   - Chinese text: 金额, 网络手续费
+   - Shows withdrawal details in Chinese
+   
+3. WALLET (generic) - Use only if neither Swift nor Binance
+
 RECEIPT STRUCTURE (Chinese Binance/Exchange):
 - Main display: "-147.368 USDT" ← Amount customer receives
 - 金额 (Amount): 148.368 USDT ← TOTAL we spent (this is what we need!)
@@ -858,10 +876,11 @@ EXAMPLES:
    - 网络手续费: 1 USDT
    Return: {"amount": 147.368, "network_fee": 1, "total_amount": 148.368, "bank_type": "binance"}
 
-2. Swift Receipt:
-   - Shows: "-24.813896 USDT" sent
-   - Network fee: 0.12 USDT
-   Return: {"amount": 24.813896, "network_fee": 0.12, "total_amount": 24.933896, "bank_type": "swift"}
+2. Swift Receipt (with N logo, TRX network fee, "View on block explorer"):
+   - Shows: "-1,003 USDT" sent (with "1,001.72 $" below)
+   - Network fee: 8.4799 TRX (2.50 $) ← Convert to USDT: ~2.50
+   - Recipient: TJKBfj3...Dnv4NKY (TRC20 address)
+   Return: {"amount": 1003, "network_fee": 2.50, "total_amount": 1005.50, "bank_type": "swift"}
 
 3. Wallet Receipt:
    - Shows: "25.5 USDT" with no network fee
@@ -870,12 +889,14 @@ EXAMPLES:
 RETURN EXACT JSON FORMAT:
 {
     "amount": <the displayed/sent amount as positive number>,
-    "network_fee": <network fee if shown, 0 if not>,
+    "network_fee": <network fee if shown, 0 if not - for Swift, use the USD value from TRX fee>,
     "total_amount": <amount + network_fee = total to deduct from balance>,
     "bank_type": "binance" or "swift" or "wallet"
 }
 
 CRITICAL RULES:
+- If you see "N" logo + "Network fee" in TRX + "View on block explorer" → bank_type = "swift"
+- For Swift receipts, network fee is shown in TRX with USD equivalent - use the USD value
 - total_amount = amount + network_fee (ALWAYS add fee for all types)
 - This is for SELL: we need TOTAL spent, not what customer receives
 - Always return amounts as positive numbers
@@ -974,6 +995,24 @@ async def ocr_extract_usdt_received(image_base64):
 
 TASK: Extract the USDT amount that WE WILL RECEIVE (the final amount after network fee is deducted).
 
+BANK TYPE IDENTIFICATION (CRITICAL):
+
+1. SWIFT WALLET - Identify by these features:
+   - Has "N" logo icon (blue/purple N symbol) at top
+   - Clean white interface with purple/blue accents
+   - Shows "Network fee" in TRX format (e.g., "8.4799 TRX (2.50 $)")
+   - Has "View on block explorer" link at bottom
+   - Shows Date, Status, Recipient fields
+   - Recipient shows TRC20 address (starts with T...)
+   - Amount displayed as "-X,XXX USDT" with USD equivalent below
+   
+2. BINANCE - Identify by these features:
+   - Yellow/gold Binance logo
+   - Chinese text: 金额, 网络手续费
+   - Shows withdrawal details in Chinese
+   
+3. WALLET (generic) - Use only if neither Swift nor Binance
+
 CRITICAL - READ THE MAIN DISPLAYED AMOUNT:
 - Look for the LARGE displayed amount at the top (e.g., "-147.368 USDT")
 - This is the ACTUAL amount we receive after network fee is deducted
@@ -990,26 +1029,27 @@ CALCULATION:
 - Example: 147.368 = 148.368 - 1
 
 EXAMPLES:
-1. Receipt shows:
+1. Binance Receipt shows:
    - Main display: "-147.368 USDT"
    - 金额: 148.368 USDT
    - 网络手续费: 1 USDT
-   → Return received_amount: 147.368 (the main displayed amount)
+   → Return: {"received_amount": 147.368, "network_fee": 1, "bank_type": "binance"}
 
-2. Receipt shows:
-   - Main display: "-1415 USDT"
-   - 提币数量: 1417 USDT
-   - 手续费: 2 USDT
-   → Return received_amount: 1415 (the main displayed amount)
+2. Swift Receipt (with N logo, TRX network fee, "View on block explorer"):
+   - Main display: "-1,003 USDT" (with "1,001.72 $" below)
+   - Network fee: 8.4799 TRX (2.50 $)
+   - Recipient: TJKBfj3...Dnv4NKY
+   → Return: {"received_amount": 1003, "network_fee": 2.50, "bank_type": "swift"}
 
 RETURN JSON FORMAT:
 {
     "received_amount": <the MAIN DISPLAYED amount, which is amount AFTER fee deduction>,
-    "network_fee": <network fee if shown, 0 if not>,
+    "network_fee": <network fee if shown, 0 if not - for Swift, use the USD value from TRX fee>,
     "bank_type": "binance" or "swift" or "wallet"
 }
 
 CRITICAL: 
+- If you see "N" logo + "Network fee" in TRX + "View on block explorer" → bank_type = "swift"
 - received_amount = the large displayed amount (e.g., -147.368)
 - This is the FINAL amount we receive, NOT the amount before fee
 - Always return as positive number (ignore minus sign)"""
@@ -1102,6 +1142,7 @@ async def ocr_match_mmk_receipt_to_banks(image_base64, mmk_banks_list):
             
             bank_info_list.append(
                 f"Bank ID {bank_id}: {bank_name}\n"
+                f"  Full Account: {account}\n"
                 f"  Account ends in: {last_4}\n"
                 f"  Holder: {holder}"
             )
@@ -1113,39 +1154,50 @@ async def ocr_match_mmk_receipt_to_banks(image_base64, mmk_banks_list):
 REGISTERED BANK ACCOUNTS:
 {banks_text}
 
+BANK VISUAL IDENTIFICATION GUIDE:
+- KBZ: "FAST TRANSFER - CONFIRM" header, green success banner, blue text, account starts with 2725
+- CB Bank: Blue "CB BANK" logo, "Account History" header
+- AYA: AYA Bank logo, account starts with 4003
+- Yoma: Yoma Bank branding
+- Kpay: RED/CORAL color with "Payment Successful", phone number format
+
 TASK:
 1. Extract the transaction amount (positive number, ignore minus signs)
-2. Extract recipient account/phone number (may be partially masked: xxxx, *****)
-3. Extract recipient name
+2. Extract recipient/beneficiary account number (FULL number if visible, or partial if masked)
+3. Extract recipient/beneficiary name
 4. For EACH bank, calculate confidence score (0-100) based on:
-   - Account number match (last 4 digits): 50 points
-   - Name match (case-insensitive, partial OK): 50 points
+   - Account number match: 60 points (check FULL account or last 4 digits)
+   - Name match (case-insensitive, partial OK): 40 points
    - Total: 100 points if both match perfectly
+
+CRITICAL MATCHING RULES:
+- FIRST check if the FULL account number is visible in the receipt
+- If full account visible (e.g., "27251127201844001"), match against registered accounts:
+  - "2725****4001" matches "27251127201844001" (starts with 2725, ends with 4001) = KBZ
+  - "0225****6042" matches accounts starting with 0225 and ending with 6042 = CB
+- If only partial account visible (e.g., "xxxx-xxxx-2957"), match last 4 digits
+- For name "CHAW SU THU ZAR", match against registered holder name (case-insensitive)
+- Give 60 points for account match, 40 points for name match
+- If no match at all, give 0 points
 
 RETURN EXACT JSON FORMAT:
 {{
     "amount": <number>,
     "banks": {{
-        1: <confidence 0-100>,
-        2: <confidence 0-100>,
-        3: <confidence 0-100>
+        "1": <confidence 0-100>,
+        "2": <confidence 0-100>,
+        "3": <confidence 0-100>
     }}
 }}
-
-MATCHING RULES:
-- For partial account "xxxx-xxxx-xxxx-2957", check if "2957" matches last 4 digits
-- For partial phone "******3777", check if "3777" matches last 4 digits
-- For name "CHAW SU THU ZAR", match against registered holder name (case-insensitive)
-- Give 50 points for account match, 50 points for name match
-- If no match at all, give 0 points
 
 IMPORTANT:
 - Return confidence for ALL banks in the list
 - Amount must be positive number
 - Confidence must be 0-100 for each bank
-- Use bank IDs exactly as provided
+- Use bank IDs exactly as provided (as strings)
 - DO NOT include comments in JSON
-- DO NOT use trailing commas"""
+- DO NOT use trailing commas
+- ONLY ONE bank should have high confidence (the matching one)"""
 
         response = client.chat.completions.create(
             model="gpt-4o",
