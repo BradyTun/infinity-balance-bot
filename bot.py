@@ -60,14 +60,24 @@ def init_database():
     cursor = conn.cursor()
     
     # User prefixes table
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS user_prefixes (
-            user_id INTEGER PRIMARY KEY,
-            prefix_name TEXT NOT NULL,
-            username TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
+    if isinstance(conn, sqlite3.Connection):
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_prefixes (
+                user_id INTEGER PRIMARY KEY,
+                prefix_name TEXT NOT NULL,
+                username TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+    else:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_prefixes (
+                user_id SERIAL PRIMARY KEY,
+                prefix_name TEXT NOT NULL,
+                username TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
     
     # Settings table for receiving USDT account
     cursor.execute('''
@@ -79,28 +89,52 @@ def init_database():
     ''')
     
     # MMK bank accounts table for verification
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS mmk_bank_accounts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            bank_name TEXT NOT NULL UNIQUE,
-            account_number TEXT NOT NULL,
-            account_holder TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
+    if isinstance(conn, sqlite3.Connection):
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS mmk_bank_accounts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bank_name TEXT NOT NULL UNIQUE,
+                account_number TEXT NOT NULL,
+                account_holder TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+    else:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS mmk_bank_accounts (
+                id SERIAL PRIMARY KEY,
+                bank_name TEXT NOT NULL UNIQUE,
+                account_number TEXT NOT NULL,
+                account_holder TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
     
     # Media group photos table for storing downloaded photos
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS media_group_photos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            media_group_id TEXT NOT NULL,
-            message_id INTEGER NOT NULL,
-            file_path TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(media_group_id, message_id)
-        )
-    ''')
+    if isinstance(conn, sqlite3.Connection):
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS media_group_photos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                media_group_id TEXT NOT NULL,
+                message_id INTEGER NOT NULL,
+                file_path TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(media_group_id, message_id)
+            )
+        ''')
+    else:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS media_group_photos (
+                id SERIAL PRIMARY KEY,
+                media_group_id TEXT NOT NULL,
+                message_id INTEGER NOT NULL,
+                file_path TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(media_group_id, message_id)
+            )
+        ''')
     
     # Create index for faster lookups
     cursor.execute('''
@@ -111,21 +145,38 @@ def init_database():
     ''')
     
     # Sale receipt OCR results table - stores pre-scanned receipt data
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS sale_receipt_ocr (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            message_id INTEGER NOT NULL,
-            media_group_id TEXT,
-            receipt_index INTEGER DEFAULT 0,
-            transaction_type TEXT,
-            detected_amount REAL,
-            detected_bank TEXT,
-            detected_usdt REAL,
-            ocr_raw_data TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(message_id, receipt_index)
-        )
-    ''')
+    if isinstance(conn, sqlite3.Connection):
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sale_receipt_ocr (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id INTEGER NOT NULL,
+                media_group_id TEXT,
+                receipt_index INTEGER DEFAULT 0,
+                transaction_type TEXT,
+                detected_amount REAL,
+                detected_bank TEXT,
+                detected_usdt REAL,
+                ocr_raw_data TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(message_id, receipt_index)
+            )
+        ''')
+    else:
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sale_receipt_ocr (
+                id SERIAL PRIMARY KEY,
+                message_id INTEGER NOT NULL,
+                media_group_id TEXT,
+                receipt_index INTEGER DEFAULT 0,
+                transaction_type TEXT,
+                detected_amount REAL,
+                detected_bank TEXT,
+                detected_usdt REAL,
+                ocr_raw_data TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(message_id, receipt_index)
+            )
+        ''')
     
     # Create index for sale receipt lookups
     cursor.execute('''
