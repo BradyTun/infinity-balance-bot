@@ -10,6 +10,8 @@ import json
 import logging
 import base64
 import sqlite3
+import psycopg2
+import psycopg2.extras
 import asyncio
 import traceback
 from telegram import Update
@@ -41,12 +43,20 @@ if not TELEGRAM_BOT_TOKEN or not OPENAI_API_KEY:
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# Database setup
-DB_FILE = 'bot_data.db'
+def get_db_connection():
+    """Return a database connection (PostgreSQL or SQLite based on env)"""
+    db_url = os.getenv('DATABASE_URL')
+    if db_url and db_url.startswith('postgres'):
+        conn = psycopg2.connect(db_url, cursor_factory=psycopg2.extras.DictCursor)
+        return conn
+    else:
+        db_file = os.getenv('SQLITE_DB_FILE', 'bot_data.db')
+        conn = sqlite3.connect(db_file)
+        return conn
 
 def init_database():
-    """Initialize SQLite database for user-prefix mappings and settings"""
-    conn = sqlite3.connect(DB_FILE)
+    """Initialize database for user-prefix mappings and settings (Postgres or SQLite)"""
+    conn = get_db_connection()
     cursor = conn.cursor()
     
     # User prefixes table
@@ -165,12 +175,19 @@ def save_media_group_photo(media_group_id: str, message_id: int, photo_bytes: by
         f.write(photo_bytes)
     
     # Save to database
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('''
-        INSERT OR REPLACE INTO media_group_photos (media_group_id, message_id, file_path)
-        VALUES (?, ?, ?)
-    ''', (media_group_id, message_id, file_path))
+    try:
+        cursor.execute('''
+            INSERT INTO media_group_photos (media_group_id, message_id, file_path)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (media_group_id, message_id) DO UPDATE SET file_path = EXCLUDED.file_path
+        ''', (media_group_id, message_id, file_path))
+    except Exception:
+        cursor.execute('''
+            INSERT OR REPLACE INTO media_group_photos (media_group_id, message_id, file_path)
+            VALUES (?, ?, ?)
+        ''', (media_group_id, message_id, file_path))
     conn.commit()
     conn.close()
     
@@ -179,13 +196,20 @@ def save_media_group_photo(media_group_id: str, message_id: int, photo_bytes: by
 
 def get_media_group_photos(media_group_id: str) -> list:
     """Get all photo paths for a media group from database"""
-    conn = sqlite3.connect(DB_FILE)
+    conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute('''
-        SELECT message_id, file_path FROM media_group_photos
-        WHERE media_group_id = ?
-        ORDER BY message_id
-    ''', (media_group_id,))
+    try:
+        cursor.execute('''
+            SELECT message_id, file_path FROM media_group_photos
+            WHERE media_group_id = %s
+            ORDER BY message_id
+        ''', (media_group_id,))
+    except Exception:
+        cursor.execute('''
+            SELECT message_id, file_path FROM media_group_photos
+            WHERE media_group_id = ?
+            ORDER BY message_id
+        ''', (media_group_id,))
     results = cursor.fetchall()
     conn.close()
     return results
